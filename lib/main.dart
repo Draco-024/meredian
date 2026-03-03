@@ -90,8 +90,6 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
   Future<void> _initializeAppBackground() async {
     try {
       await NotificationService().init();
-      // We don't ask for permissions here anymore. 
-      // We wait until they toggle the switch!
     } catch (e) {
       debugPrint("Native Init Ignored: $e");
     }
@@ -186,11 +184,10 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
   }
 
   Future<void> _pickCustomAudio() async {
-    // If testing on Web PC, show a notification instead of crashing
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Custom Tones are only supported on the compiled Mobile App.', style: GoogleFonts.inter(color: Colors.white)),
+          content: Text('Custom Tones are only supported on the mobile app.', style: GoogleFonts.inter(color: Colors.white)),
           backgroundColor: const Color(0xFF0F172A),
           behavior: SnackBarBehavior.floating,
         ),
@@ -470,7 +467,7 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                                     onChanged: (val) async {
                                       Haptics.vibrate(HapticsType.selection);
                                       
-                                      // EXPLICTLY REQUEST PERMISSIONS HERE WHEN TOGGLED ON
+                                      // 🔥 THIS IS WHERE THE PERMISSION IS TRIGGERED FOR THE FIRST TIME
                                       if (val == true) {
                                         await NotificationService().requestPermissions();
                                       }
@@ -508,9 +505,9 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                                         ),
                                       ],
                                     ),
-                                    
-                                    // Custom Tone Picker (Now visible everywhere)
                                     const SizedBox(height: 16),
+                                    
+                                    // 🔥 THE CUSTOM TONE UI IS NOW UNCLOAKED AND VISIBLE EVERYWHERE
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [

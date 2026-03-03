@@ -10,7 +10,6 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  // Made nullable so it doesn't instantiate on the Web!
   FlutterLocalNotificationsPlugin? _localNotificationsPlugin;
   bool _isInitialized = false;
 
@@ -44,6 +43,7 @@ class NotificationService {
     }
   }
 
+  // Called exactly when the user turns on the Reminders toggle
   Future<void> requestPermissions() async {
     if (kIsWeb || _localNotificationsPlugin == null) return; 
 
@@ -65,6 +65,8 @@ class NotificationService {
     final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
     tz.TZDateTime scheduledDate =
         tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    
+    // If the scheduled time has already passed today, schedule it for tomorrow
     if (scheduledDate.isBefore(now)) {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
@@ -72,11 +74,16 @@ class NotificationService {
   }
 
   Future<void> scheduleSmartReminders(int intervalHours, String? customSoundPath) async {
-    if (kIsWeb || _localNotificationsPlugin == null) return; 
+    if (kIsWeb || _localNotificationsPlugin == null) {
+      debugPrint("Meridian: Smart Reminders bypassed for Web Preview.");
+      return; 
+    }
 
     try {
+      // Clear old alarms before setting new ones
       await cancelAllReminders(); 
 
+      // Create a unique channel for custom sounds so Android doesn't cache the old one
       String channelId = customSoundPath != null 
           ? 'meridian_custom_${DateTime.now().millisecondsSinceEpoch}' 
           : 'meridian_default';
@@ -90,10 +97,11 @@ class NotificationService {
         }
       }
 
-      int startHour = 8; 
-      int endHour = 22;  
+      int startHour = 8;  // Reminders start at 8:00 AM
+      int endHour = 22;   // Reminders end at 10:00 PM
       int notificationId = 0;
 
+      // Steps exactly by the user's selected 1h, 2h, 3h, or 4h interval
       for (int hour = startHour; hour <= endHour; hour += intervalHours) {
         await _localNotificationsPlugin!.zonedSchedule(
           notificationId++,
