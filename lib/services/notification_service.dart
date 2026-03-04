@@ -43,39 +43,28 @@ class NotificationService {
     }
   }
 
-  // Called exactly when the user turns on the Reminders toggle
+  // Forces Android 14 to prompt for Exact Alarm Permissions
   Future<void> requestPermissions() async {
     if (kIsWeb || _localNotificationsPlugin == null) return; 
 
     try {
-      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-          _localNotificationsPlugin!.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+      if (Platform.isAndroid) {
+        final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+            _localNotificationsPlugin!.resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
 
-      if (androidImplementation != null) {
-        await androidImplementation.requestNotificationsPermission();
-        await androidImplementation.requestExactAlarmsPermission();
+        if (androidImplementation != null) {
+          await androidImplementation.requestNotificationsPermission();
+          await androidImplementation.requestExactAlarmsPermission();
+        }
       }
     } catch (e) {
       debugPrint("Meridian Permission Error: $e");
     }
   }
 
-  tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduledDate =
-        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
-    
-    // If the scheduled time has already passed today, schedule it for tomorrow
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
-    return scheduledDate;
-  }
-
-  Future<void> scheduleSmartReminders(int intervalHours, String? customSoundPath) async {
+  Future<void> scheduleSmartReminders(int intervalHours, String toneType, String? customSoundPath) async {
     if (kIsWeb || _localNotificationsPlugin == null) {
-      debugPrint("Meridian: Smart Reminders bypassed for Web Preview.");
       return; 
     }
 
@@ -83,50 +72,59 @@ class NotificationService {
       // Clear old alarms before setting new ones
       await cancelAllReminders(); 
 
-      // Create a unique channel for custom sounds so Android doesn't cache the old one
-      String channelId = customSoundPath != null 
-          ? 'meridian_custom_${DateTime.now().millisecondsSinceEpoch}' 
-          : 'meridian_default';
+      String channelId = 'meridian_test_channel_${toneType}_${customSoundPath?.hashCode ?? 0}';
 
       AndroidNotificationSound? notificationSound;
       
-      if (!kIsWeb && customSoundPath != null) {
+      if (toneType == 'custom' && customSoundPath != null && !kIsWeb) {
         final file = File(customSoundPath);
         if (file.existsSync()) {
           notificationSound = UriAndroidNotificationSound("file://$customSoundPath");
         }
-      }
+      } else if (toneType == 'deep_synth' || toneType == 'lux_chime' || toneType == 'zen_bowl') {
+        notificationSound = RawResourceAndroidNotificationSound(toneType);
+      } 
 
-      int startHour = 8;  // Reminders start at 8:00 AM
-      int endHour = 22;   // Reminders end at 10:00 PM
       int notificationId = 0;
 
-      // Steps exactly by the user's selected 1h, 2h, 3h, or 4h interval
-      for (int hour = startHour; hour <= endHour; hour += intervalHours) {
+      // ---------------------------------------------------------
+      // 🔥 TEMPORARY 1-MINUTE EMULATOR TEST LOGIC 🔥
+      // Schedules 3 alarms: 1 min, 2 min, and 3 min from right now
+      // ---------------------------------------------------------
+      final DateTime now = DateTime.now();
+      
+      for (int i = 1; i <= 3; i++) {
+        DateTime testTime = now.add(Duration(minutes: i));
+        tz.TZDateTime scheduledDate = tz.TZDateTime.from(testTime, tz.local);
+
         await _localNotificationsPlugin!.zonedSchedule(
           notificationId++,
-          'Meridian',
-          'Maintain your flow. Time to hydrate.',
-          _nextInstanceOfTime(hour, 0),
+          'Meridian TEST',
+          'Test Reminder ($i min). It works!',
+          scheduledDate,
           NotificationDetails(
             android: AndroidNotificationDetails(
               channelId,
-              'Meridian Vitality',
-              channelDescription: 'Premium daily hydration intervals',
+              'Meridian Test Channel',
               importance: Importance.max,
               priority: Priority.high,
               enableVibration: true,
               color: const Color(0xFF000000), 
               playSound: true,
               sound: notificationSound,
+              category: AndroidNotificationCategory.reminder,
+              visibility: NotificationVisibility.public,
+              fullScreenIntent: true, 
             ),
           ),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.time,
+          // Removed daily repeat purely for this immediate test
         );
       }
+      // ---------------------------------------------------------
+
     } catch (e) {
       debugPrint("Meridian Scheduling Error: $e");
     }

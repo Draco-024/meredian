@@ -58,8 +58,10 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
   double _currentWater = 0.0;
   bool _remindersActive = false;
   int _reminderInterval = 2; 
+  
+  String _selectedTone = 'default'; 
   String? _customSoundPath; 
-  String _customSoundName = 'Default'; 
+  String _customSoundName = 'CUSTOM'; 
   
   bool _climateOverrideApplied = false;
   List<double> _weeklyHistory = List.filled(7, 0.0);
@@ -116,8 +118,9 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
         _reminderInterval = _prefs.getInt('reminderInterval') ?? 2;
         _climateOverrideApplied = _prefs.getBool('climateOverride') ?? false;
         
+        _selectedTone = _prefs.getString('selectedTone') ?? 'default';
         _customSoundPath = _prefs.getString('customSoundPath');
-        _customSoundName = _prefs.getString('customSoundName') ?? 'Default';
+        _customSoundName = _prefs.getString('customSoundName') ?? 'CUSTOM';
 
         String historyJson = _prefs.getString('weeklyHistory') ?? '[]';
         List<dynamic> loadedHistory = jsonDecode(historyJson);
@@ -167,7 +170,7 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
 
   void _updateReminders() {
     if (_remindersActive) {
-      NotificationService().scheduleSmartReminders(_reminderInterval, _customSoundPath);
+      NotificationService().scheduleSmartReminders(_reminderInterval, _selectedTone, _customSoundPath);
     } else {
       NotificationService().cancelAllReminders();
     }
@@ -184,16 +187,7 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
   }
 
   Future<void> _pickCustomAudio() async {
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Custom Tones are only supported on the mobile app.', style: GoogleFonts.inter(color: Colors.white)),
-          backgroundColor: const Color(0xFF0F172A),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return; 
-    }
+    if (kIsWeb) return; 
     
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: false);
@@ -208,11 +202,13 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
         setState(() {
           _customSoundPath = savedFile.path;
           _customSoundName = fileName.split('.').first.replaceAll('_', ' ');
-          if (_customSoundName.length > 12) _customSoundName = '${_customSoundName.substring(0, 10)}...';
+          if (_customSoundName.length > 10) _customSoundName = '${_customSoundName.substring(0, 8)}...';
+          _selectedTone = 'custom';
         });
 
         _prefs.setString('customSoundPath', _customSoundPath!);
         _prefs.setString('customSoundName', _customSoundName);
+        _prefs.setString('selectedTone', 'custom');
         _updateReminders(); 
       }
     } catch (e) {
@@ -220,15 +216,17 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
     }
   }
 
-  void _resetToDefaultAudio() {
-    Haptics.vibrate(HapticsType.selection);
-    setState(() {
-      _customSoundPath = null;
-      _customSoundName = 'Default';
-    });
-    _prefs.remove('customSoundPath');
-    _prefs.setString('customSoundName', 'Default');
-    _updateReminders();
+  void _selectTone(String tone) {
+    if (tone == 'custom') {
+      _pickCustomAudio();
+    } else {
+      Haptics.vibrate(HapticsType.selection);
+      setState(() {
+        _selectedTone = tone;
+      });
+      _prefs.setString('selectedTone', tone);
+      _updateReminders();
+    }
   }
 
   void _showCustomWaterSheet(Color primaryColor) {
@@ -396,9 +394,9 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildGlassButton('+ 150ml', () => _addWater(150), isGoalMet, primaryColor),
-                            _buildGlassButton('+ 250ml', () => _addWater(250), isGoalMet, primaryColor),
-                            _buildGlassButton('+ 500ml', () => _addWater(500), isGoalMet, primaryColor),
+                            _buildQuickButton('+ 150', () => _addWater(150), primaryColor),
+                            _buildQuickButton('+ 250', () => _addWater(250), primaryColor),
+                            _buildQuickButton('+ 500', () => _addWater(500), primaryColor),
                             GestureDetector(
                               onTap: () {
                                 Haptics.vibrate(HapticsType.selection);
@@ -438,6 +436,7 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(color: const Color(0xFF0F172A).withOpacity(0.6), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white12, width: 1)),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
@@ -466,12 +465,19 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                                     value: _remindersActive, activeColor: Colors.black, activeTrackColor: primaryColor, inactiveTrackColor: Colors.white12, inactiveThumbColor: Colors.white54,
                                     onChanged: (val) async {
                                       Haptics.vibrate(HapticsType.selection);
-                                      
-                                      // 🔥 THIS IS WHERE THE PERMISSION IS TRIGGERED FOR THE FIRST TIME
                                       if (val == true) {
                                         await NotificationService().requestPermissions();
+                                        
+                                        // 🔥 THE TEST MODE SNACKBAR CONFIRMATION
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('TEST MODE: Notifications scheduled for 1 min, 2 min, and 3 min from right now.', style: GoogleFonts.inter(color: Colors.white, fontSize: 12)),
+                                            backgroundColor: const Color(0xFF0EA5E9),
+                                            duration: const Duration(seconds: 4),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
                                       }
-
                                       setState(() => _remindersActive = val);
                                       _prefs.setBool('remindersActive', val);
                                       _updateReminders();
@@ -482,6 +488,7 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                               AnimatedSize(
                                 duration: const Duration(milliseconds: 300), curve: Curves.easeInOutCubic,
                                 child: _remindersActive ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Padding(padding: EdgeInsets.symmetric(vertical: 12.0), child: Divider(color: Colors.white12, height: 1)),
                                     Row(
@@ -505,37 +512,21 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 16),
-                                    
-                                    // 🔥 THE CUSTOM TONE UI IS NOW UNCLOAKED AND VISIBLE EVERYWHERE
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('Custom Tone', style: GoogleFonts.inter(color: Colors.white54, fontSize: 12)),
-                                        Row(
-                                          children: [
-                                            if (_customSoundPath != null)
-                                              GestureDetector(
-                                                onTap: _resetToDefaultAudio,
-                                                child: Container(margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.close_rounded, size: 14, color: Colors.redAccent)),
-                                              ),
-                                            GestureDetector(
-                                              onTap: _pickCustomAudio,
-                                              child: AnimatedContainer(
-                                                duration: const Duration(milliseconds: 200), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(10), border: Border.all(color: _customSoundPath != null ? primaryColor : Colors.white12)),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(Icons.library_music_rounded, size: 14, color: _customSoundPath != null ? primaryColor : Colors.white54),
-                                                    const SizedBox(width: 6),
-                                                    Text(_customSoundName.toUpperCase(), style: GoogleFonts.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                    const SizedBox(height: 24),
+                                    Text('Notification Tone', style: GoogleFonts.inter(color: Colors.white54, fontSize: 12)),
+                                    const SizedBox(height: 12),
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      physics: const BouncingScrollPhysics(),
+                                      child: Row(
+                                        children: [
+                                          _buildToneChip('Default', 'default', primaryColor),
+                                          _buildToneChip('Deep Synth', 'deep_synth', primaryColor),
+                                          _buildToneChip('Lux Chime', 'lux_chime', primaryColor),
+                                          _buildToneChip('Zen Bowl', 'zen_bowl', primaryColor),
+                                          _buildToneChip(_selectedTone == 'custom' ? _customSoundName.toUpperCase() : 'Custom...', 'custom', primaryColor, isCustom: true),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ) : const SizedBox.shrink(),
@@ -578,7 +569,7 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
     );
   }
 
-  Widget _buildGlassButton(String label, VoidCallback onTap, bool isGoalMet, Color primaryColor) {
+  Widget _buildQuickButton(String label, VoidCallback onTap, Color primaryColor) {
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -586,10 +577,34 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            height: 54, width: 80,
             decoration: BoxDecoration(color: primaryColor.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: primaryColor.withOpacity(0.2))),
-            child: Text(label, style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.w500, fontSize: 13)),
+            child: Center(child: Text(label, style: GoogleFonts.inter(color: primaryColor, fontWeight: FontWeight.w600, fontSize: 14))),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToneChip(String label, String value, Color primaryColor, {bool isCustom = false}) {
+    bool isSelected = _selectedTone == value;
+    return GestureDetector(
+      onTap: () => _selectTone(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryColor : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? primaryColor : Colors.white12),
+        ),
+        child: Row(
+          children: [
+            Icon(isCustom ? Icons.folder_open_rounded : Icons.music_note_rounded, size: 14, color: isSelected ? Colors.black : Colors.white54),
+            const SizedBox(width: 6),
+            Text(label, style: GoogleFonts.inter(color: isSelected ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+          ],
         ),
       ),
     );
