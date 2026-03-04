@@ -59,6 +59,7 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
   bool _remindersActive = false;
   int _reminderInterval = 2; 
   
+  // Audio State
   String _selectedTone = 'default'; 
   String? _customSoundPath; 
   String _customSoundName = 'CUSTOM'; 
@@ -468,11 +469,10 @@ class _MeridianDashboardState extends State<MeridianDashboard> with TickerProvid
                                       if (val == true) {
                                         await NotificationService().requestPermissions();
                                         
-                                        // 🔥 THE TEST MODE SNACKBAR CONFIRMATION
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('TEST MODE: Notifications scheduled for 1 min, 2 min, and 3 min from right now.', style: GoogleFonts.inter(color: Colors.white, fontSize: 12)),
-                                            backgroundColor: const Color(0xFF0EA5E9),
+                                            content: Text('Please ensure Meridian is set to "Unrestricted" in your Battery settings.', style: GoogleFonts.inter(color: Colors.white, fontSize: 12)),
+                                            backgroundColor: const Color(0xFF0F172A),
                                             duration: const Duration(seconds: 4),
                                             behavior: SnackBarBehavior.floating,
                                           ),
